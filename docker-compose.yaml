@@ -1,0 +1,17 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  plan-controller-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    env_file:
+      - ./.env
+    restart: unless-stopped
+    # Optional: For local development, if you want to connect to other local services by name
+    # depends_on:
+    #   - shared-variables-service # If running in the same compose network
+    #   - main-service             # If running in the same compose network

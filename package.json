@@ -1,0 +1,29 @@
+{
+    "name": "plan-controller-service",
+    "version": "1.0.0",
+    "description": "Microservice for managing website plan states, free trials, and billing dates.",
+    "main": "server.js",
+    "type": "module",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node --watch server.js"
+    },
+    "keywords": [
+        "microservice",
+        "subscription",
+        "free trial",
+        "billing",
+        "postgresql",
+        "node-cron"
+    ],
+    "author": "Gemini",
+    "license": "MIT",
+    "dependencies": {
+        "axios": "^1.7.2",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.5",
+        "express": "^4.19.2",
+        "node-cron": "^3.0.3",
+        "pg": "^8.12.0"
+    }
+}
