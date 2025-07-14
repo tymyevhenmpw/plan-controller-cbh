@@ -86,7 +86,7 @@ async function checkAndTriggerEvents() {
             if (daysRemaining < 0 && !state.free_trial_ended_action_taken) { // Trial has passed
                 console.log(`[Scheduler] Action: Website ${websiteId} free trial has ended (past due). Notifying main service to downgrade.`);
                 try {
-                    await axios.put(`${mainBackendUrl}/websites/${websiteId}/free-trial-ended`, {}, {
+                    await axios.put(`${mainBackendUrl}/api/websites/${websiteId}/free-trial-ended`, {}, {
                         headers: {
                             'Content-Type': 'application/json',
                             'x-plan-controller-api-key': process.env.PLAN_CONTROLLER_API_KEY
@@ -100,7 +100,7 @@ async function checkAndTriggerEvents() {
             } else if (daysRemaining === 0 && !state.free_trial_ended_action_taken) { // Trial ends today
                 console.log(`[Scheduler] Action: Website ${websiteId} free trial ends today. Notifying main service to downgrade.`);
                 try {
-                    await axios.put(`${mainBackendUrl}/websites/${websiteId}/free-trial-ended`, {}, {
+                    await axios.put(`${mainBackendUrl}/api/websites/${websiteId}/free-trial-ended`, {}, {
                         headers: {
                             'Content-Type': 'application/json',
                             'x-plan-controller-api-key': process.env.PLAN_CONTROLLER_API_KEY

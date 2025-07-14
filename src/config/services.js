@@ -3,8 +3,9 @@ import axios from 'axios';
 
 let freeTrialDurationDays = 14; // Default value
 let mainBackendUrl = 'http://localhost:3000'; // Default value, will be fetched
+let adminPanelUrl = 'http://localhost:303'; // Default value, will be fetched (e.g., your Next.js admin panel URL)
 
-async function fetchSharedVariable(name) { // This is the function that needs to be exported
+async function fetchSharedVariable(name) {
     const url = `${process.env.SHARED_VARIABLES_SERVICE_URL}/variables/${name}`;
     const apiKey = process.env.SHARED_VARIABLES_SERVICE_API_KEY;
 
@@ -30,8 +31,15 @@ async function fetchSharedVariable(name) { // This is the function that needs to
 
 async function initializeSharedServices() {
     console.log('[SharedServicesConfig] Initializing shared service configurations...');
-    // Fetch FREE_TRIAL_DURATION_DAYS
-    const fetchedFreeTrialDays = await fetchSharedVariable('FREE_TRIAL_DURATION_DAYS');
+    
+    const results = await Promise.all([
+        fetchSharedVariable('FREE_TRIAL_DURATION_DAYS'),
+        fetchSharedVariable('MAIN_BACKEND_URL'),
+        fetchSharedVariable('ADMIN_URL') // Fetch ADMIN_URL
+    ]);
+
+    const [fetchedFreeTrialDays, fetchedMainBackendUrl, fetchedAdminUrl] = results;
+
     if (fetchedFreeTrialDays !== null) {
         freeTrialDurationDays = fetchedFreeTrialDays;
         console.log(`[SharedServicesConfig] FREE_TRIAL_DURATION_DAYS set to: ${freeTrialDurationDays}`);
@@ -39,15 +47,20 @@ async function initializeSharedServices() {
         console.warn(`[SharedServicesConfig] Using default FREE_TRIAL_DURATION_DAYS: ${freeTrialDurationDays}`);
     }
 
-    // Fetch MAIN_BACKEND_URL
-    const fetchedMainBackendUrl = await fetchSharedVariable('MAIN_BACKEND_URL');
     if (fetchedMainBackendUrl !== null) {
-        mainBackendUrl = fetchedMainBackendUrl; // Assign to the module-level variable
+        mainBackendUrl = fetchedMainBackendUrl;
         console.log(`[SharedServicesConfig] MAIN_BACKEND_URL set to: ${mainBackendUrl}`);
     } else {
         console.warn(`[SharedServicesConfig] Using default MAIN_BACKEND_URL: ${mainBackendUrl}`);
     }
+
+    if (fetchedAdminUrl !== null) {
+        adminPanelUrl = fetchedAdminUrl; // Assign to the module-level variable
+        console.log(`[SharedServicesConfig] ADMIN_URL set to: ${adminPanelUrl}`);
+    } else {
+        console.warn(`[SharedServicesConfig] Using default ADMIN_URL: ${adminPanelUrl}`);
+    }
 }
 
-// Ensure fetchSharedVariable is included in the export list
-export { initializeSharedServices, freeTrialDurationDays, mainBackendUrl, fetchSharedVariable };
+// Export all necessary variables and functions
+export { initializeSharedServices, freeTrialDurationDays, mainBackendUrl, adminPanelUrl, fetchSharedVariable };
