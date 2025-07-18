@@ -17,6 +17,39 @@ function getDaysBetween(date1, date2) {
     return diffDays;
 }
 
+// Function to send a warning notification to the main backend
+async function sendWarningNotification(websiteId, type, daysUntilEvent, nextBillingDate = null) {
+    if (!mainBackendUrl) {
+        console.error(`[Scheduler] Cannot send warning notification: Main backend URL not configured.`);
+        return;
+    }
+    const mainServiceApiKey = process.env.MAIN_SERVICE_API_KEY; // Ensure you have this ENV var in your Plan Controller
+
+    if (!mainServiceApiKey) {
+        console.error(`[Scheduler] Cannot send warning notification: MAIN_SERVICE_API_KEY not configured.`);
+        return;
+    }
+
+    try {
+        await axios.post(`${mainBackendUrl}/api/websites/${websiteId}/payment-warning`, {
+            type,
+            daysUntilEvent,
+            nextBillingDate: nextBillingDate ? nextBillingDate.toISOString() : null
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-main-service-api-key': mainServiceApiKey // Use an API key for internal service authentication
+            }
+        });
+        console.log(`[Scheduler] Successfully sent ${type} warning for website ${websiteId} (ends in ${daysUntilEvent} days).`);
+    } catch (error) {
+        console.error(`[Scheduler] Failed to send ${type} warning for website ${websiteId}:`, error.message);
+        if (axios.isAxiosError(error) && error.response) {
+            console.error(`[Scheduler] Main Service Error Response:`, error.response.data);
+        }
+    }
+}
+
 async function checkAndTriggerEvents() {
     console.log(`[Scheduler] Running check at ${new Date().toISOString()}`);
 
@@ -31,58 +64,47 @@ async function checkAndTriggerEvents() {
     const planStates = await getAllPlanStates();
     const now = new Date();
     // Normalize 'now' to start of day for consistent day calculations
-    // This `now` will be the reference point for "today"
-    now.setHours(0, 0, 0, 0); 
+    now.setHours(0, 0, 0, 0);
 
     for (const state of planStates) {
         const websiteId = state.website_id;
-        
+
         if (!mainBackendUrl) {
             console.error(`[Scheduler] Skipping checks for website ${websiteId}: Main service URL not configured.`);
             continue;
         }
 
-        let updatedFlags = {}; 
+        let updatedFlags = {};
 
         // --- Free Trial Monitoring ---
         if (state.free_trial_start_date) {
             const trialStartDate = new Date(state.free_trial_start_date);
-            trialStartDate.setHours(0, 0, 0, 0); // Normalize trial start date
-            
-            // CORRECTED: trialEndDate is the LAST DAY of the trial.
-            // If trialDuration is 3, and trialStartDate is July 9th,
-            // trialEndDate should be July 11th (9th, 10th, 11th).
-            // So, add (freeTrialDuration - 1) days to the start date.
-            const trialEndDate = new Date(trialStartDate);
-            trialEndDate.setDate(trialEndDate.getDate() + (freeTrialDuration - 1)); // Corrected calculation
-            trialEndDate.setHours(0, 0, 0, 0); // Normalize trial end date
+            trialStartDate.setHours(0, 0, 0, 0);
 
-            // Calculate days remaining until trialEndDate (inclusive of trialEndDate)
-            // If trialEndDate is today, daysRemaining = 0.
-            // If trialEndDate is tomorrow, daysRemaining = 1.
+            const trialEndDate = new Date(trialStartDate);
+            trialEndDate.setDate(trialEndDate.getDate() + (freeTrialDuration - 1));
+            trialEndDate.setHours(0, 0, 0, 0);
+
             const daysRemaining = getDaysBetween(now, trialEndDate);
-            
+
             console.log(`Website ${websiteId}: Trial Start: ${trialStartDate.toISOString().split('T')[0]}, Trial End Day (inclusive): ${trialEndDate.toISOString().split('T')[0]}, Now: ${now.toISOString().split('T')[0]}, Days Remaining: ${daysRemaining}`);
 
-            // Notify X days before trial ends
-            // daysRemaining means: 'X' more full days are left, including today, before the trial is over.
-            // So, if daysRemaining = 5, it means "trial ends 5 days from now (including today)".
-            // If trial ends on Friday, and it's Monday, daysRemaining = 5.
             if (daysRemaining === 5 && !state.free_trial_end_notified_5d) {
                 console.log(`[Scheduler] Notification: Website ${websiteId} free trial ends in 5 days.`);
+                await sendWarningNotification(websiteId, 'free_trial_end', 5);
                 updatedFlags.free_trial_end_notified_5d = true;
-            } 
+            }
             if (daysRemaining === 3 && !state.free_trial_end_notified_3d) {
                 console.log(`[Scheduler] Notification: Website ${websiteId} free trial ends in 3 days.`);
+                await sendWarningNotification(websiteId, 'free_trial_end', 3);
                 updatedFlags.free_trial_end_notified_3d = true;
-            } 
+            }
             if (daysRemaining === 1 && !state.free_trial_end_notified_1d) { // Tomorrow
                 console.log(`[Scheduler] Notification: Website ${websiteId} free trial ends tomorrow.`);
+                await sendWarningNotification(websiteId, 'free_trial_end', 1);
                 updatedFlags.free_trial_end_notified_1d = true;
-            } 
-            
-            // Free trial has ended (daysRemaining < 0), and action hasn't been taken
-            // If trial ends today (daysRemaining = 0), action taken today or next run.
+            }
+
             if (daysRemaining < 0 && !state.free_trial_ended_action_taken) { // Trial has passed
                 console.log(`[Scheduler] Action: Website ${websiteId} free trial has ended (past due). Notifying main service to downgrade.`);
                 try {
@@ -93,7 +115,7 @@ async function checkAndTriggerEvents() {
                         }
                     });
                     console.log(`[Scheduler] Main service notified for free trial end of website ${websiteId}.`);
-                    updatedFlags.free_trial_ended_action_taken = true; 
+                    updatedFlags.free_trial_ended_action_taken = true;
                 } catch (error) {
                     console.error(`[Scheduler] Failed to notify main service for website ${websiteId} free trial end:`, error.message);
                 }
@@ -107,7 +129,7 @@ async function checkAndTriggerEvents() {
                         }
                     });
                     console.log(`[Scheduler] Main service notified for free trial end of website ${websiteId}.`);
-                    updatedFlags.free_trial_ended_action_taken = true; 
+                    updatedFlags.free_trial_ended_action_taken = true;
                 } catch (error) {
                     console.error(`[Scheduler] Failed to notify main service for website ${websiteId} free trial end:`, error.message);
                 }
@@ -117,18 +139,27 @@ async function checkAndTriggerEvents() {
         // --- Billing Date Monitoring ---
         if (state.next_billing_date) {
             const nextBillingDate = new Date(state.next_billing_date);
-            nextBillingDate.setHours(0, 0, 0, 0); // Normalize billing date
+            nextBillingDate.setHours(0, 0, 0, 0);
 
             const daysUntilBilling = getDaysBetween(now, nextBillingDate);
 
             console.log(`Website ${websiteId}: Next billing on ${nextBillingDate.toISOString().split('T')[0]}. Now: ${now.toISOString().split('T')[0]}, Days until billing: ${daysUntilBilling}. Flag: 3d=${state.billing_date_notified_3d}`);
 
-
+            if (daysUntilBilling === 5 && !state.billing_date_notified_5d) { // Assuming a 5-day warning
+                console.log(`[Scheduler] Notification: Website ${websiteId} next billing date is in 5 days.`);
+                await sendWarningNotification(websiteId, 'billing', 5, nextBillingDate);
+                updatedFlags.billing_date_notified_5d = true;
+            }
             if (daysUntilBilling === 3 && !state.billing_date_notified_3d) {
                 console.log(`[Scheduler] Notification: Website ${websiteId} next billing date is in 3 days.`);
+                await sendWarningNotification(websiteId, 'billing', 3, nextBillingDate);
                 updatedFlags.billing_date_notified_3d = true;
             }
-            // Add more billing date notifications (e.g., 1 day, on due date) if needed
+            if (daysUntilBilling === 1 && !state.billing_date_notified_1d) { // Tomorrow
+                console.log(`[Scheduler] Notification: Website ${websiteId} next billing date is tomorrow.`);
+                await sendWarningNotification(websiteId, 'billing', 1, nextBillingDate);
+                updatedFlags.billing_date_notified_1d = true;
+            }
         }
 
         // --- Update Notification Flags in DB if any were changed ---
